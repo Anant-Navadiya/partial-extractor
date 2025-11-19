@@ -49,10 +49,9 @@ class HtmlRefactorer:
         self.page_titles = {}  # Corrected variable name
         self.page_description = {}
         self.page_keywords = {}
-        # ❗ NEW: Dictionary to hold parsed and tagged soup objects
+        # NEW: Dictionary to hold parsed and tagged soup objects
         self.soups = {}
 
-    # ---------------- MAIN RUN ----------------
     def run(self):
         print("🚀 Starting HTML refactoring process...")
         self.out_dir.mkdir(parents=True, exist_ok=True)
@@ -65,9 +64,8 @@ class HtmlRefactorer:
         self._extract_partials()
         self._replace_in_files()
 
-        print("\n✨ Refactoring complete!")
+        print("\nRefactoring complete!")
 
-    # ---------------- HELPERS ----------------
     def _to_zss_node(self, node):
         label = node.name
         if node.has_attr("class") and node["class"]:
@@ -85,7 +83,7 @@ class HtmlRefactorer:
         if not root_tag_in_copy:
             return None
 
-        # ❗ FIX 1: Find and REMOVE all comments first.
+        # Find and remove all comments first.
         for comment in root_tag_in_copy.find_all(string=lambda text: isinstance(text, Comment)):
             comment.extract()
 
@@ -115,7 +113,7 @@ class HtmlRefactorer:
             for attr, new_val in attrs_to_normalize.items():
                 el.attrs[attr] = new_val
 
-        # ❗ FIX 2: Now, process only the remaining NavigableString text nodes.
+        # Process only the remaining NavigableString text nodes.
         for t in root_tag_in_copy.find_all(string=True):
             if isinstance(t, NavigableString):
                 nt = re.sub(r"\s+", " ", str(t)).strip()
@@ -169,9 +167,8 @@ class HtmlRefactorer:
                 break
         return "".join(reversed(suffix))
 
-    # ---------------- STEP 0: GLOBAL PARTIALS ----------------
     def _extract_common_head_and_footer(self):
-        print("\n[0] 📦 Extracting global head/footer partials...")
+        print("\nExtracting global head/footer partials...")
         html_files = sorted(self.src_dir.rglob("*.html"))
         self.all_html_files = [f.resolve() for f in html_files]
 
@@ -243,8 +240,6 @@ class HtmlRefactorer:
         write_partial(self.partials_dir, "footer-scripts.html", "\n".join(footer_lines))
         self.common_js_srcs = common_js
 
-    # ---------------- STEP 1: MINE AND TAG CANDIDATES ----------------
-    # ❗ REVISED METHOD
     def _mine_and_tag_candidates(self):
         print("\n[1/4] 🔍 Mining and tagging candidate components...")
         idx = 0
@@ -267,7 +262,7 @@ class HtmlRefactorer:
                     key = f"c_{idx}"
                     tag['data-refactor-id'] = key
 
-                    # ❗ FIX: Capture the original, raw HTML of the tag
+                    # Capture the original, raw HTML of the tag
                     raw_tag_html = str(tag)
 
                     # Create a copy for canonicalization, leaving original tag unmodified
@@ -280,26 +275,25 @@ class HtmlRefactorer:
                         mh = self._get_minhash(canonical_tag)
                         simh = self._get_simhash(canonical_tag)
                         self.lsh.insert(key, mh)
-                        # ❗ FIX: Store the raw_tag_html along with the canonical_tag
+                        # Store the raw_tag_html along with the canonical_tag
                         self.items[key] = (html_path, raw_tag_html, canonical_tag, mh, simh)
                         idx += 1
 
                 self.soups[html_path] = soup
 
             except Exception as e:
-                print(f"   ⚠️  Could not process {html_path}: {e}")
-        print(f"   Found and tagged {len(self.items)} candidates.")
+                print(f"Could not process {html_path}: {e}")
+        print(f"Found and tagged {len(self.items)} candidates.")
 
-    # ---------------- STEP 2: CLUSTER ----------------
     def _cluster_candidates(self):
-        print("\n[2/4] 🧬 Clustering...")
+        print("\nClustering...")
         sorted_keys = sorted(self.items.keys())
         visited = set()
         for key in sorted_keys:
             if key in visited:
                 continue
 
-            # ❗ FIX: Unpack 5 items instead of 4 to account for raw_tag_html
+            # Unpack 5 items instead of 4 to account for raw_tag_html
             _, _, seed_tag, seed_mh, seed_simh = self.items[key]
 
             near_keys = self.lsh.query(seed_mh)
@@ -310,7 +304,7 @@ class HtmlRefactorer:
                 if nk == key or nk in visited:
                     continue
 
-                # ❗ FIX: Unpack 5 items here as well
+                # Unpack 5 items here as well
                 _, _, near_tag, _, near_simh = self.items[nk]
 
                 if seed_simh.distance(near_simh) > self.SIMHASH_DISTANCE:
@@ -327,21 +321,20 @@ class HtmlRefactorer:
                 self.clusters.append(cluster)
         print(f"   Found {len(self.clusters)} clusters.")
 
-    # ---------------- STEP 3: PARTIALS ----------------
     def _extract_partials(self):
-        print("\n[3/4] 📝 Extracting partials...")
+        print("\nExtracting partials...")
         final_clusters_info = []
 
         for i, cluster in enumerate(self.clusters):
             medoid_key, medoid_data = cluster[0]
-            # ❗ FIX: Unpack the new data structure including the raw html
+            # Unpack the new data structure including the raw html
             medoid_path, medoid_raw_html, medoid_tag, _, _ = medoid_data
 
             if not medoid_tag or not hasattr(medoid_tag, 'name'):
                 print(f"   ⚠️  Skipping invalid cluster {i + 1} (medoid was empty).")
                 continue
 
-            # ❗ FIX: Use the pristine, raw HTML to create the partial
+            # Use the pristine, raw HTML to create the partial
             partial_soup = BeautifulSoup(medoid_raw_html, 'html.parser')
             # Find the first tag, which is our component
             medoid_template = partial_soup.find()
@@ -354,7 +347,7 @@ class HtmlRefactorer:
             write_partial(self.partials_dir, partial_name, medoid_template)
 
             cluster_instances = []
-            # ❗ FIX: Adjust unpacking for the loop
+            # Adjust unpacking for the loop
             for key, (path, _, _, _, _) in cluster:
                 cluster_instances.append({"refactor_id": key, "source_file": str(path)})
 
@@ -365,16 +358,13 @@ class HtmlRefactorer:
 
         self.clusters = final_clusters_info
 
-    # ---------------- STEP 4: REPLACE ----------------
-    # ❗ REVISED METHOD
     def _replace_in_files(self):
-        print("\n[4/4] 🔄 Replacing HTML with import statements...")
+        print("\nReplacing HTML with import statements...")
 
-        # ❗ KEY CHANGE: Iterate over the pre-loaded, tagged soup objects
         for p, soup in self.soups.items():
             head, body = soup.head, soup.body
 
-            # --- Replace cluster instances by refactor-id
+            # Replace cluster instances by refactor-id
             for cluster in self.clusters:
                 include_stmt = create_include_statement(cluster["partial_file"])
                 for inst in cluster["instances"]:
@@ -385,7 +375,7 @@ class HtmlRefactorer:
                         if target:
                             target.replace_with(BeautifulSoup(include_stmt, "html.parser"))
 
-            # --- HEAD replacement
+            # HEAD replacement
             if head:
                 # Clear existing head tags that will be replaced by partials
                 for tag_type in ["title", "meta", "link", "style", "script"]:
@@ -404,21 +394,19 @@ class HtmlRefactorer:
                 head.insert(0, BeautifulSoup(title_meta_include, "html.parser"))
                 head.append(BeautifulSoup("@@include('./partials/head-css.html')", "html.parser"))
 
-            # --- FOOTER replacement
+            # FOOTER replacement
             if body:
                 for tag in body.find_all("script", src=True):
                     if tag.get("src") in self.common_js_srcs:
                         tag.decompose()
                 body.append(BeautifulSoup("@@include('./partials/footer-scripts.html')", "html.parser"))
 
-            # --- Write result
             out_path = self.out_dir / p.relative_to(self.src_dir)
             out_path.parent.mkdir(parents=True, exist_ok=True)
             out_path.write_text(soup.prettify(), encoding="utf-8")
             print(f"   Updated {p.relative_to(self.src_dir)}")
 
 
-# ---------------- MAIN ----------------
 if __name__ == "__main__":
     import argparse
 
